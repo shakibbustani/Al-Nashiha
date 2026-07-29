@@ -14,39 +14,26 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AspectRatio
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FastForward
 import androidx.compose.material.icons.filled.FastRewind
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.VolumeUp
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -70,11 +57,19 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem as Media3Item
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
 import com.example.data.model.MediaType
 import com.example.ui.MainViewModel
 import com.example.ui.theme.RedPrimary
 import kotlinx.coroutines.delay
 
+@OptIn(UnstableApi::class)
 @Composable
 fun MediaPlayerOverlay(
     viewModel: MainViewModel,
@@ -94,13 +89,74 @@ fun MediaPlayerOverlay(
     var zoomScale by remember { mutableFloatStateOf(1f) }
     var discRotation by remember { mutableFloatStateOf(0f) }
 
-    // Auto update simulated playback position
-    LaunchedEffect(isPlaying, media) {
+    // Initialize ExoPlayer
+    val exoPlayer = remember(context) {
+        ExoPlayer.Builder(context).build()
+    }
+
+    // Load media into ExoPlayer
+    LaunchedEffect(media.id, media.uriString, media.path) {
+        val uriStr = media.uriString.ifEmpty { media.path }
+        val media3Item = Media3Item.fromUri(uriStr)
+        exoPlayer.setMediaItem(media3Item)
+        exoPlayer.prepare()
+        if (media.lastPositionMs > 0) {
+            exoPlayer.seekTo(media.lastPositionMs)
+        }
+        exoPlayer.playWhenReady = isPlaying
+    }
+
+    // Play/Pause state sync
+    LaunchedEffect(isPlaying) {
+        if (exoPlayer.playWhenReady != isPlaying) {
+            exoPlayer.playWhenReady = isPlaying
+        }
+    }
+
+    // Playback Speed sync
+    LaunchedEffect(currentSpeed) {
+        exoPlayer.playbackParameters = PlaybackParameters(currentSpeed)
+    }
+
+    // ExoPlayer listener & cleanup
+    DisposableEffect(exoPlayer) {
+        val listener = object : Player.Listener {
+            override fun onIsPlayingChanged(playing: Boolean) {
+                if (viewModel.isPlaying.value != playing) {
+                    viewModel.isPlaying.value = playing
+                }
+            }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    val dur = exoPlayer.duration
+                    if (dur > 0) {
+                        viewModel.playbackDuration.value = dur
+                    }
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
+        onDispose {
+            exoPlayer.removeListener(listener)
+            exoPlayer.stop()
+            exoPlayer.release()
+        }
+    }
+
+    // Position updates & Disc rotation
+    LaunchedEffect(isPlaying) {
         while (isPlaying) {
-            delay(500)
-            val newPos = (currentPosition + (500 * currentSpeed).toLong()).coerceAtMost(duration)
-            viewModel.updatePlaybackPosition(newPos)
-            discRotation = (discRotation + 10f) % 360f
+            delay(300)
+            val pos = exoPlayer.currentPosition
+            val dur = exoPlayer.duration
+            if (pos >= 0) {
+                viewModel.updatePlaybackPosition(pos)
+            }
+            if (dur > 0) {
+                viewModel.playbackDuration.value = dur
+            }
+            discRotation = (discRotation + 6f) % 360f
         }
     }
 
@@ -111,7 +167,7 @@ fun MediaPlayerOverlay(
             .testTag("media_player_overlay")
     ) {
         if (media.mediaType == MediaType.VIDEO) {
-            // Video Mode View
+            // Video Mode View with Real ExoPlayer Surface
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -123,53 +179,45 @@ fun MediaPlayerOverlay(
                     },
                 contentAlignment = Alignment.Center
             ) {
-                // Video Surface Mock canvas with gradient & status
-                val gradientColors = GradientPalettes[media.thumbnailGradientIndex % GradientPalettes.size]
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .aspectRatio(16f / 9f)
-                        .background(Brush.linearGradient(gradientColors)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (!isPlaying) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp)
-                                .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.6f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.PlayArrow,
-                                contentDescription = "Paused",
-                                tint = Color.White,
-                                modifier = Modifier.size(40.dp)
+                AndroidView(
+                    factory = { ctx ->
+                        PlayerView(ctx).apply {
+                            player = exoPlayer
+                            useController = false
+                            resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
+                            layoutParams = FrameLayout.LayoutParams(
+                                ViewGroup.LayoutParams.MATCH_PARENT,
+                                ViewGroup.LayoutParams.MATCH_PARENT
                             )
                         }
-                    }
-                }
+                    },
+                    update = { playerView ->
+                        playerView.player = exoPlayer
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
             }
         } else {
-            // Audio Mode View (Animated Audio Disc / Wave)
+            // Audio Mode View (Animated Audio Disc / Wave + Real Audio Playback)
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .clickable { controlsVisible = !controlsVisible }
                     .padding(24.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.Center
             ) {
                 Box(
                     modifier = Modifier
-                        .size(200.dp)
+                        .size(220.dp)
                         .rotate(discRotation)
                         .clip(CircleShape)
-                        .background(Brush.radialGradient(listOf(RedPrimary, Color.Black))),
+                        .background(Brush.radialGradient(listOf(RedPrimary, Color.DarkGray, Color.Black))),
                     contentAlignment = Alignment.Center
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(70.dp)
+                            .size(75.dp)
                             .clip(CircleShape)
                             .background(Color.White),
                         contentAlignment = Alignment.Center
@@ -178,7 +226,7 @@ fun MediaPlayerOverlay(
                             Icons.Default.GraphicEq,
                             contentDescription = "Sound Wave",
                             tint = RedPrimary,
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(40.dp)
                         )
                     }
                 }
@@ -273,6 +321,7 @@ fun MediaPlayerOverlay(
                     IconButton(
                         onClick = {
                             val newPos = (currentPosition - 10000L).coerceAtLeast(0L)
+                            exoPlayer.seekTo(newPos)
                             viewModel.updatePlaybackPosition(newPos)
                         }
                     ) {
@@ -302,6 +351,7 @@ fun MediaPlayerOverlay(
                     IconButton(
                         onClick = {
                             val newPos = (currentPosition + 10000L).coerceAtMost(duration)
+                            exoPlayer.seekTo(newPos)
                             viewModel.updatePlaybackPosition(newPos)
                         }
                     ) {
@@ -340,9 +390,11 @@ fun MediaPlayerOverlay(
                     }
 
                     Slider(
-                        value = if (duration > 0) currentPosition.toFloat() / duration.toFloat() else 0f,
+                        value = if (duration > 0) (currentPosition.toFloat() / duration.toFloat()).coerceIn(0f, 1f) else 0f,
                         onValueChange = { ratio ->
-                            viewModel.updatePlaybackPosition((ratio * duration).toLong())
+                            val targetMs = (ratio * duration).toLong()
+                            exoPlayer.seekTo(targetMs)
+                            viewModel.updatePlaybackPosition(targetMs)
                         },
                         colors = SliderDefaults.colors(
                             thumbColor = RedPrimary,

@@ -1,5 +1,8 @@
 package com.example.ui.screens
 
+import android.view.ViewGroup
+import android.widget.FrameLayout
+import androidx.annotation.OptIn
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -32,6 +35,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -44,14 +49,105 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem as Media3Item
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import com.example.data.model.MediaItem
 import com.example.data.model.MediaType
 import com.example.ui.MainViewModel
 import com.example.ui.components.GradientPalettes
 import com.example.ui.theme.RedPrimary
+
+@OptIn(UnstableApi::class)
+@Composable
+fun ClipVideoPlayer(
+    clip: MediaItem,
+    isPlaying: Boolean,
+    onPositionUpdate: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val exoPlayer = remember(context) { ExoPlayer.Builder(context).build() }
+
+    LaunchedEffect(clip.id, clip.uriString, clip.path) {
+        val uriStr = clip.uriString.ifEmpty { clip.path }
+        val media3Item = Media3Item.fromUri(uriStr)
+        exoPlayer.setMediaItem(media3Item)
+        exoPlayer.prepare()
+        exoPlayer.repeatMode = Player.REPEAT_MODE_ONE
+        exoPlayer.playWhenReady = isPlaying
+    }
+
+    LaunchedEffect(isPlaying) {
+        exoPlayer.playWhenReady = isPlaying
+    }
+
+    DisposableEffect(exoPlayer) {
+        onDispose {
+            exoPlayer.stop()
+            exoPlayer.release()
+        }
+    }
+
+    LaunchedEffect(isPlaying) {
+        while (isPlaying) {
+            kotlinx.coroutines.delay(300)
+            if (exoPlayer.duration > 0) {
+                val progress = exoPlayer.currentPosition.toFloat() / exoPlayer.duration.toFloat()
+                onPositionUpdate(progress.coerceIn(0f, 1f))
+            }
+        }
+    }
+
+    Box(
+        modifier = modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer
+                    useController = false
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    layoutParams = FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                    )
+                }
+            },
+            update = { playerView ->
+                playerView.player = exoPlayer
+            },
+            modifier = Modifier.fillMaxSize()
+        )
+
+        if (!isPlaying) {
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.5f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.PlayArrow,
+                    contentDescription = "Play",
+                    tint = Color.White,
+                    modifier = Modifier.size(48.dp)
+                )
+            }
+        }
+    }
+}
 
 @Composable
 fun ClipsScreen(
@@ -103,30 +199,12 @@ fun ClipsScreen(
                         .fillMaxSize()
                         .clickable { isPlaying = !isPlaying }
                 ) {
-                    // Video Canvas / Background Mock
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Brush.verticalGradient(gradientColors)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (!isPlaying) {
-                            Box(
-                                modifier = Modifier
-                                    .size(72.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.5f)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.PlayArrow,
-                                    contentDescription = "Play",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                            }
-                        }
-                    }
+                    // Real ExoPlayer Video Canvas
+                    ClipVideoPlayer(
+                        clip = clip,
+                        isPlaying = isPlaying,
+                        onPositionUpdate = { pos -> sliderPosition = pos }
+                    )
 
                     if (showUIControls) {
                         // Gradient Overlay for readability

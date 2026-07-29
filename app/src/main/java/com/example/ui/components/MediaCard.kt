@@ -1,5 +1,9 @@
 package com.example.ui.components
 
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.media.MediaMetadataRetriever
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -38,6 +42,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,14 +52,23 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
+import coil.decode.VideoFrameDecoder
+import coil.request.ImageRequest
+import coil.request.videoFrameMillis
 import com.example.data.model.MediaItem
 import com.example.data.model.MediaType
 import com.example.ui.theme.RedPrimary
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 val GradientPalettes = listOf(
     listOf(Color(0xFFE53935), Color(0xFF8E24AA)),
@@ -63,6 +77,66 @@ val GradientPalettes = listOf(
     listOf(Color(0xFFFB8C00), Color(0xFFD81B60)),
     listOf(Color(0xFF3949AB), Color(0xFF8E24AA))
 )
+
+@Composable
+fun MediaThumbnailImage(
+    item: MediaItem,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+
+    if (item.mediaType == MediaType.VIDEO) {
+        val mediaUri = remember(item.uriString, item.path) {
+            item.uriString.ifEmpty { item.path }
+        }
+        val request = remember(mediaUri) {
+            ImageRequest.Builder(context)
+                .data(mediaUri)
+                .decoderFactory(VideoFrameDecoder.Factory())
+                .videoFrameMillis(1000)
+                .crossfade(true)
+                .build()
+        }
+        AsyncImage(
+            model = request,
+            contentDescription = "Video Thumbnail",
+            contentScale = ContentScale.Crop,
+            modifier = modifier.fillMaxSize()
+        )
+    } else {
+        var audioArtBitmap by remember(item.uriString, item.path) { mutableStateOf<Bitmap?>(null) }
+
+        LaunchedEffect(item.uriString, item.path) {
+            withContext(Dispatchers.IO) {
+                try {
+                    val retriever = MediaMetadataRetriever()
+                    val targetPath = item.uriString.ifEmpty { item.path }
+                    if (targetPath.startsWith("content://")) {
+                        retriever.setDataSource(context, android.net.Uri.parse(targetPath))
+                    } else if (targetPath.startsWith("http://") || targetPath.startsWith("https://")) {
+                        retriever.setDataSource(targetPath, HashMap())
+                    } else if (targetPath.isNotBlank()) {
+                        retriever.setDataSource(targetPath)
+                    }
+                    val artBytes = retriever.embeddedPicture
+                    retriever.release()
+                    if (artBytes != null) {
+                        audioArtBitmap = BitmapFactory.decodeByteArray(artBytes, 0, artBytes.size)
+                    }
+                } catch (_: Exception) {}
+            }
+        }
+
+        audioArtBitmap?.let { bitmap ->
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Audio Art",
+                contentScale = ContentScale.Crop,
+                modifier = modifier.fillMaxSize()
+            )
+        }
+    }
+}
 
 @Composable
 fun MediaCard(
@@ -103,6 +177,8 @@ fun MediaCard(
                     .background(Brush.linearGradient(gradientColors)),
                 contentAlignment = Alignment.Center
             ) {
+                // Real Media Thumbnail (Video Frame or Audio Art)
+                MediaThumbnailImage(item = item)
                 // Diagonal stripes if locked
                 if (item.isLocked) {
                     Box(

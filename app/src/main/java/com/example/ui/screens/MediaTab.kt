@@ -10,8 +10,10 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -145,26 +147,34 @@ fun MediaTab(
             ) {
                 Text(
                     text = "All Media (${mediaList.size})",
-                    fontSize = 18.sp,
+                    fontSize = 16.sp,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.testTag("media_count_header")
+                    modifier = Modifier
+                        .weight(1f, fill = false)
+                        .testTag("media_count_header")
                 )
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
                     Button(
                         onClick = { requestPermissionsAndScan() },
                         colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
                         shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.testTag("scan_storage_button")
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .defaultMinSize(minWidth = 1.dp, minHeight = 34.dp)
+                            .testTag("scan_storage_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.Refresh,
                             contentDescription = "Scan Storage",
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Scan Device", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text(text = "Scan Device", fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
 
                     OutlinedButton(
@@ -172,15 +182,18 @@ fun MediaTab(
                         border = BorderStroke(1.dp, RedPrimary),
                         shape = RoundedCornerShape(20.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = RedPrimary),
-                        modifier = Modifier.testTag("filter_pill_button")
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .defaultMinSize(minWidth = 1.dp, minHeight = 34.dp)
+                            .testTag("filter_pill_button")
                     ) {
                         Icon(
                             imageVector = Icons.Default.FilterList,
                             contentDescription = "Filter",
-                            modifier = Modifier.size(16.dp)
+                            modifier = Modifier.size(15.dp)
                         )
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "Filter", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Text(text = "Filter", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }

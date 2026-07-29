@@ -82,15 +82,7 @@ fun SafeBoxTab(
     val currentPin = settings?.safeBoxPin?.ifEmpty { "1234" } ?: "1234"
     val isFingerprintEnabled = settings?.fingerprintEnabled ?: false
 
-    val currentRecoveryKey = remember(settings?.recoveryKey) {
-        if (settings?.recoveryKey.isNullOrBlank()) {
-            val genKey = com.example.util.generateRecoveryKey()
-            viewModel.updateSettings((settings ?: AppSettingsEntity()).copy(recoveryKey = genKey))
-            genKey
-        } else {
-            settings?.recoveryKey ?: ""
-        }
-    }
+    val currentRecoveryKey = settings?.recoveryKey ?: ""
 
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf(false) }
@@ -547,10 +539,11 @@ fun SafeBoxTab(
             confirmButton = {
                 Button(
                     onClick = {
+                        val activeDbKey = settings?.recoveryKey ?: ""
                         val normalizedInput = com.example.util.normalizeKey(keyInput)
-                        val normalizedActiveKey = com.example.util.normalizeKey(currentRecoveryKey)
+                        val normalizedActiveKey = com.example.util.normalizeKey(activeDbKey)
 
-                        if (normalizedInput.isNotEmpty() && normalizedInput == normalizedActiveKey) {
+                        if (normalizedInput.isNotEmpty() && normalizedActiveKey.isNotEmpty() && normalizedInput == normalizedActiveKey) {
                             // Valid Recovery Key! Reset PIN to default 1234 & auto-generate NEW Recovery Key
                             val brandNewKey = com.example.util.generateRecoveryKey()
                             val resetSettings = (settings ?: AppSettingsEntity()).copy(

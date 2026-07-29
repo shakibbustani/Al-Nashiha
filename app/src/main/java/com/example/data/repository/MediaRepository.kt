@@ -62,7 +62,29 @@ class MediaRepository(private val context: Context) {
             )
 
             // Seed initial settings
-            settingsDao.saveSettings(AppSettingsEntity(id = 1, safeBoxPin = "1234"))
+            settingsDao.saveSettings(
+                AppSettingsEntity(
+                    id = 1,
+                    safeBoxPin = "1234",
+                    recoveryKey = com.example.util.generateRecoveryKey()
+                )
+            )
+        } else {
+            // Ensure settings entity row 1 exists and has a recovery key
+            val existing = settingsDao.getSettingsDirect()
+            if (existing == null) {
+                settingsDao.saveSettings(
+                    AppSettingsEntity(
+                        id = 1,
+                        safeBoxPin = "1234",
+                        recoveryKey = com.example.util.generateRecoveryKey()
+                    )
+                )
+            } else if (existing.recoveryKey.isBlank()) {
+                settingsDao.saveSettings(
+                    existing.copy(recoveryKey = com.example.util.generateRecoveryKey())
+                )
+            }
         }
     }
 

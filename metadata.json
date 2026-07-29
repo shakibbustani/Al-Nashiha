@@ -1,0 +1,6 @@
+{
+  "name": "AL-NASHiHA",
+  "description": "Offline Android video and audio media player with Safe Box, Playlists, History, Clips feed, Custom Folders, and Settings.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -154,18 +154,24 @@ fun SettingsScreen(
 
             // Safe Box Settings
             item {
-                var showKeyDialog by remember { mutableStateOf(false) }
+                var showPdfSuccessDialog by remember { mutableStateOf(false) }
+                var pdfSavedPath by remember { mutableStateOf("") }
                 val context = androidx.compose.ui.platform.LocalContext.current
-                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
 
-                // Ensure a key exists
-                val currentKey = remember(settings.recoveryKey) {
-                    if (settings.recoveryKey.isBlank()) {
-                        val genKey = com.example.util.generateRecoveryKey()
-                        viewModel.updateSettings(settings.copy(recoveryKey = genKey))
-                        genKey
+                fun handleGenerateAndSavePdf() {
+                    val keyToUse = if (settings.recoveryKey.isBlank()) {
+                        com.example.util.generateRecoveryKey()
                     } else {
                         settings.recoveryKey
+                    }
+                    viewModel.updateSettings(settings.copy(recoveryKey = keyToUse))
+
+                    val savedFile = com.example.util.createRecoveryKeyPdf(context, keyToUse)
+                    if (savedFile != null) {
+                        pdfSavedPath = savedFile.absolutePath
+                        showPdfSuccessDialog = true
+                    } else {
+                        android.widget.Toast.makeText(context, "Failed to create PDF. Please check storage permissions.", android.widget.Toast.LENGTH_LONG).show()
                     }
                 }
 
@@ -190,91 +196,73 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { showKeyDialog = true }
+                                .clickable { handleGenerateAndSavePdf() }
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(modifier = Modifier.weight(1f)) {
                                 Text(text = "Recovery Key (Offline Backup)", fontSize = 14.sp, fontWeight = FontWeight.Medium)
                                 Text(text = "Use this code if you forget your PIN", fontSize = 11.sp, color = Color.Gray)
                             }
-                            Text(
-                                text = "View / Copy",
-                                fontSize = 13.sp,
-                                color = RedPrimary,
-                                fontWeight = FontWeight.Bold
-                            )
+                            Button(
+                                onClick = { handleGenerateAndSavePdf() },
+                                colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                Text(
+                                    text = if (settings.recoveryKey.isNotBlank()) "Re-generate & Save PDF" else "Save as PDF",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
                 }
 
-                if (showKeyDialog) {
+                if (showPdfSuccessDialog) {
                     AlertDialog(
-                        onDismissRequest = { showKeyDialog = false },
-                        title = { Text("Safe Box Recovery Key") },
+                        onDismissRequest = { showPdfSuccessDialog = false },
+                        title = {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Lock, contentDescription = null, tint = RedPrimary)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Recovery Key PDF Saved!")
+                            }
+                        },
                         text = {
                             Column {
                                 Text(
-                                    text = "This single-use 16-character key allows you to reset your PIN completely offline if you ever forget it. Save it in a safe place (Notes/Password Manager).",
-                                    fontSize = 12.sp,
-                                    color = Color.Gray
+                                    text = "Recovery Key PDF saved successfully!",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = RedPrimary
                                 )
-                                Spacer(modifier = Modifier.height(14.dp))
+                                Spacer(modifier = Modifier.height(10.dp))
                                 Card(
                                     colors = CardDefaults.cardColors(containerColor = RedLight),
-                                    shape = RoundedCornerShape(10.dp),
+                                    shape = RoundedCornerShape(8.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Column(
-                                        modifier = Modifier.padding(14.dp),
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        Text(
-                                            text = "YOUR BACKUP CODE",
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = RedPrimary,
-                                            letterSpacing = 1.sp
-                                        )
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = currentKey,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = RedPrimary,
-                                            letterSpacing = 1.sp
-                                        )
+                                    Column(modifier = Modifier.padding(10.dp)) {
+                                        Text(text = "Location:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                                        Text(text = pdfSavedPath, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                                     }
                                 }
                                 Spacer(modifier = Modifier.height(12.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    TextButton(onClick = {
-                                        val newKey = com.example.util.generateRecoveryKey()
-                                        viewModel.updateSettings(settings.copy(recoveryKey = newKey))
-                                        android.widget.Toast.makeText(context, "New Recovery Key generated!", android.widget.Toast.LENGTH_SHORT).show()
-                                    }) {
-                                        Text("Generate New Key", fontSize = 12.sp, color = Color.Gray)
-                                    }
-
-                                    Button(
-                                        onClick = {
-                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(currentKey))
-                                            android.widget.Toast.makeText(context, "Recovery Key copied to clipboard!", android.widget.Toast.LENGTH_SHORT).show()
-                                        },
-                                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
-                                    ) {
-                                        Text("Copy Key", fontSize = 12.sp)
-                                    }
-                                }
+                                Text(
+                                    text = "Please keep this PDF file in a safe place. You will need the key written inside if you ever forget your PIN.",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
+                                )
                             }
                         },
                         confirmButton = {
-                            TextButton(onClick = { showKeyDialog = false }) {
-                                Text("Done", fontWeight = FontWeight.Bold, color = RedPrimary)
+                            Button(
+                                onClick = { showPdfSuccessDialog = false },
+                                colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                            ) {
+                                Text("OK", fontWeight = FontWeight.Bold)
                             }
                         }
                     )

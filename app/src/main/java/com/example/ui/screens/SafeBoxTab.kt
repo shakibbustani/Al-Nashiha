@@ -559,11 +559,14 @@ fun SafeBoxTab(
                             )
                             viewModel.updateSettings(resetSettings)
 
-                            newKeyAfterReset = brandNewKey
+                            // Save new key as PDF automatically
+                            val newPdf = com.example.util.createRecoveryKeyPdf(context, brandNewKey)
+                            newKeyAfterReset = newPdf?.absolutePath ?: "Downloads/AL-NASHiHA_Recovery_Key.pdf"
+
                             showForgotPinDialog = false
                             showResetSuccessDialog = true
                         } else {
-                            keyErrorMsg = "Invalid Recovery Key! Please check your saved backup key."
+                            keyErrorMsg = "Invalid Recovery Key! Please check the key inside your saved backup PDF."
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
@@ -579,7 +582,7 @@ fun SafeBoxTab(
         )
     }
 
-    // Success Dialog after PIN Reset displaying the NEW single-use Recovery Key
+    // Success Dialog after PIN Reset displaying PDF save location
     if (showResetSuccessDialog) {
         AlertDialog(
             onDismissRequest = { showResetSuccessDialog = false },
@@ -594,7 +597,7 @@ fun SafeBoxTab(
                 Column {
                     Text(
                         text = "Your Safe Box PIN has been reset to default: 1234",
-                        fontSize = 13.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -602,7 +605,7 @@ fun SafeBoxTab(
                     Spacer(modifier = Modifier.height(12.dp))
 
                     Text(
-                        text = "IMPORTANT: Because your previous key was used, a NEW single-use Recovery Key has been generated for you below. Please copy and save it securely:",
+                        text = "IMPORTANT: Because your previous key was used, a NEW single-use Recovery Key PDF has been generated and saved for you:",
                         fontSize = 12.sp,
                         color = Color.Gray
                     )
@@ -611,48 +614,30 @@ fun SafeBoxTab(
 
                     Card(
                         colors = CardDefaults.cardColors(containerColor = RedLight),
-                        shape = RoundedCornerShape(10.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
-                        Column(
-                            modifier = Modifier.padding(14.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Text(
-                                text = "NEW RECOVERY KEY",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = RedPrimary,
-                                letterSpacing = 1.sp
-                            )
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                text = newKeyAfterReset,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = RedPrimary,
-                                letterSpacing = 1.sp
-                            )
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Text(text = "New PDF Location:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                            Text(text = newKeyAfterReset, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
                         }
                     }
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    Button(
-                        onClick = {
-                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(newKeyAfterReset))
-                            Toast.makeText(context, "New Recovery Key copied to clipboard!", Toast.LENGTH_SHORT).show()
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Text("Copy New Key")
-                    }
+                    Text(
+                        text = "Please keep this PDF file safe in case you forget your PIN again in the future.",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showResetSuccessDialog = false }) {
-                    Text("Got It", fontWeight = FontWeight.Bold, color = RedPrimary)
+                Button(
+                    onClick = { showResetSuccessDialog = false },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                ) {
+                    Text("Got It", fontWeight = FontWeight.Bold)
                 }
             }
         )

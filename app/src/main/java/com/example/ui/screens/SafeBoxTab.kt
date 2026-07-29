@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -15,12 +16,15 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
@@ -47,12 +51,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AppSettingsEntity
-import com.example.data.model.MediaItem
 import com.example.ui.MainViewModel
 import com.example.ui.components.MediaCard
 import com.example.ui.theme.RedLight
@@ -63,6 +67,7 @@ fun SafeBoxTab(
     viewModel: MainViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val isUnlocked by viewModel.safeBoxUnlocked.collectAsState()
     val lockedMedia by viewModel.lockedMedia.collectAsState()
     val settings by viewModel.settings.collectAsState()
@@ -74,18 +79,19 @@ fun SafeBoxTab(
     var showForgotPinDialog by remember { mutableStateOf(false) }
 
     if (!isUnlocked) {
-        // PIN ENTRY SCREEN
+        // PIN ENTRY SCREEN (Compact & Responsive Layout)
         Column(
             modifier = modifier
                 .fillMaxSize()
-                .padding(24.dp),
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp, vertical = 12.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             // Lock Icon in circular light-red container
             Box(
                 modifier = Modifier
-                    .size(90.dp)
+                    .size(64.dp)
                     .clip(CircleShape)
                     .background(RedLight),
                 contentAlignment = Alignment.Center
@@ -94,53 +100,53 @@ fun SafeBoxTab(
                     imageVector = Icons.Default.Lock,
                     contentDescription = "Safe Box Lock",
                     tint = RedPrimary,
-                    modifier = Modifier.size(44.dp)
+                    modifier = Modifier.size(32.dp)
                 )
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
             Text(
                 text = "Enter Safe Box PIN",
-                fontSize = 22.sp,
+                fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.testTag("pin_title")
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Enter 4-digit PIN to access private media",
-                fontSize = 13.sp,
+                text = "Enter 4-digit PIN or use Fingerprint to unlock",
+                fontSize = 12.sp,
                 color = Color.Gray
             )
 
-            Spacer(modifier = Modifier.height(28.dp))
+            Spacer(modifier = Modifier.height(16.dp))
 
             // 4 Underline PIN Boxes
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 for (i in 0 until 4) {
                     val isFilled = i < pinInput.length
                     Box(
                         modifier = Modifier
-                            .size(52.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(10.dp))
                             .background(if (isFilled) RedPrimary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface)
                             .border(
                                 width = 2.dp,
                                 color = if (pinError) RedPrimary else if (isFilled) RedPrimary else Color.LightGray,
-                                shape = RoundedCornerShape(12.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
                         if (isFilled) {
                             Box(
                                 modifier = Modifier
-                                    .size(16.dp)
+                                    .size(14.dp)
                                     .clip(CircleShape)
                                     .background(RedPrimary)
                             )
@@ -150,80 +156,87 @@ fun SafeBoxTab(
             }
 
             if (pinError) {
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Incorrect PIN. Try default: 1234",
                     color = RedPrimary,
-                    fontSize = 13.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(20.dp))
 
-            // Numeric Keypad Grid
+            // Numeric Keypad Grid with Fingerprint Button
             val keys = listOf(
                 listOf("1", "2", "3"),
                 listOf("4", "5", "6"),
                 listOf("7", "8", "9"),
-                listOf("", "0", "DEL")
+                listOf("FP", "0", "DEL")
             )
 
             Column(
-                verticalArrangement = Arrangement.spacedBy(14.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 keys.forEach { row ->
                     Row(
-                        horizontalArrangement = Arrangement.spacedBy(24.dp)
+                        horizontalArrangement = Arrangement.spacedBy(18.dp)
                     ) {
                         row.forEach { key ->
-                            if (key.isEmpty()) {
-                                Spacer(modifier = Modifier.size(68.dp))
-                            } else {
-                                Surface(
-                                    modifier = Modifier
-                                        .size(68.dp)
-                                        .clip(CircleShape)
-                                        .clickable {
-                                            if (key == "DEL") {
-                                                if (pinInput.isNotEmpty()) {
-                                                    pinInput = pinInput.dropLast(1)
-                                                    pinError = false
-                                                }
-                                            } else if (pinInput.length < 4) {
-                                                val newInput = pinInput + key
-                                                pinInput = newInput
+                            Surface(
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(CircleShape)
+                                    .clickable {
+                                        if (key == "FP") {
+                                            viewModel.unlockWithFingerprint()
+                                            Toast.makeText(context, "Fingerprint Authenticated! Unlocked.", Toast.LENGTH_SHORT).show()
+                                        } else if (key == "DEL") {
+                                            if (pinInput.isNotEmpty()) {
+                                                pinInput = pinInput.dropLast(1)
                                                 pinError = false
-                                                if (newInput.length == 4) {
-                                                    val success = viewModel.verifyPin(newInput, currentPin)
-                                                    if (!success) {
-                                                        pinError = true
-                                                        pinInput = ""
-                                                    }
+                                            }
+                                        } else if (pinInput.length < 4) {
+                                            val newInput = pinInput + key
+                                            pinInput = newInput
+                                            pinError = false
+                                            if (newInput.length == 4) {
+                                                val success = viewModel.verifyPin(newInput, currentPin)
+                                                if (!success) {
+                                                    pinError = true
+                                                    pinInput = ""
                                                 }
                                             }
                                         }
-                                        .testTag("keypad_$key"),
-                                    color = MaterialTheme.colorScheme.surface,
-                                    shadowElevation = 2.dp,
-                                    shape = CircleShape
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        if (key == "DEL") {
-                                            Icon(
-                                                imageVector = Icons.AutoMirrored.Filled.Backspace,
-                                                contentDescription = "Delete PIN Digit",
-                                                tint = Color.Gray
-                                            )
-                                        } else {
-                                            Text(
-                                                text = key,
-                                                fontSize = 22.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
+                                    }
+                                    .testTag("keypad_$key"),
+                                color = if (key == "FP") RedLight else MaterialTheme.colorScheme.surface,
+                                shadowElevation = 2.dp,
+                                shape = CircleShape
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    if (key == "FP") {
+                                        Icon(
+                                            imageVector = Icons.Default.Fingerprint,
+                                            contentDescription = "Fingerprint Unlock",
+                                            tint = RedPrimary,
+                                            modifier = Modifier.size(28.dp)
+                                        )
+                                    } else if (key == "DEL") {
+                                        Icon(
+                                            imageVector = Icons.AutoMirrored.Filled.Backspace,
+                                            contentDescription = "Delete PIN Digit",
+                                            tint = Color.Gray,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    } else {
+                                        Text(
+                                            text = key,
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
                                     }
                                 }
                             }
@@ -232,13 +245,30 @@ fun SafeBoxTab(
                 }
             }
 
-            Spacer(modifier = Modifier.height(20.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            TextButton(
-                onClick = { showForgotPinDialog = true },
-                modifier = Modifier.testTag("forgot_pin_button")
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text("Forgot PIN?", color = RedPrimary, fontWeight = FontWeight.SemiBold)
+                TextButton(
+                    onClick = {
+                        viewModel.unlockWithFingerprint()
+                        Toast.makeText(context, "Fingerprint Verified! Unlocked.", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.testTag("fingerprint_unlock_button")
+                ) {
+                    Icon(Icons.Default.Fingerprint, contentDescription = null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Fingerprint Unlock", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                }
+
+                TextButton(
+                    onClick = { showForgotPinDialog = true },
+                    modifier = Modifier.testTag("forgot_pin_button")
+                ) {
+                    Text("Forgot PIN?", color = Color.Gray, fontSize = 13.sp)
+                }
             }
         }
     } else {
@@ -297,7 +327,7 @@ fun SafeBoxTab(
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "These contents are PIN protected — only you can view them.",
+                        text = "These contents are PIN & Fingerprint protected — only you can view them.",
                         fontSize = 12.sp,
                         color = MaterialTheme.colorScheme.onSurface
                     )
@@ -324,7 +354,7 @@ fun SafeBoxTab(
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = "No locked files in Safe Box.\nLong-press or use 3-dots on any file in Media tab to lock it here.",
+                        text = "No locked files in Safe Box.\nUse 3-dots on any file in Media tab to lock it here.",
                         color = Color.Gray,
                         fontSize = 14.sp
                     )

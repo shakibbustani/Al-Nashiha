@@ -191,10 +191,42 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun addMediaToPlaylist(playlistId: Long, mediaId: Long) {
+        viewModelScope.launch {
+            val list = playlists.value.toMutableList()
+            val target = list.find { it.id == playlistId } ?: return@launch
+            val existingIds = target.mediaIdsCsv.split(",").filter { it.isNotBlank() }.toMutableList()
+            val idStr = mediaId.toString()
+            if (!existingIds.contains(idStr)) {
+                existingIds.add(idStr)
+                val newCsv = existingIds.joinToString(",")
+                val updated = target.copy(mediaIdsCsv = newCsv)
+                repository.updatePlaylist(updated)
+            }
+        }
+    }
+
+    fun removeMediaFromPlaylist(playlistId: Long, mediaId: Long) {
+        viewModelScope.launch {
+            val list = playlists.value.toMutableList()
+            val target = list.find { it.id == playlistId } ?: return@launch
+            val existingIds = target.mediaIdsCsv.split(",").filter { it.isNotBlank() }.toMutableList()
+            existingIds.remove(mediaId.toString())
+            val newCsv = existingIds.joinToString(",")
+            val updated = target.copy(mediaIdsCsv = newCsv)
+            repository.updatePlaylist(updated)
+        }
+    }
+
     fun deletePlaylist(id: Long) {
         viewModelScope.launch {
             repository.deletePlaylist(id)
         }
+    }
+
+    fun unlockWithFingerprint() {
+        safeBoxUnlocked.value = true
+        pinErrorState.value = false
     }
 
     fun createFolder(name: String, colorHex: String) {

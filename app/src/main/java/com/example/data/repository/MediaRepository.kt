@@ -86,7 +86,9 @@ class MediaRepository(private val context: Context) {
             MediaStore.Video.Media.DATA,
             MediaStore.Video.Media.DURATION,
             MediaStore.Video.Media.SIZE,
-            MediaStore.Video.Media.DATE_ADDED
+            MediaStore.Video.Media.DATE_ADDED,
+            MediaStore.Video.Media.WIDTH,
+            MediaStore.Video.Media.HEIGHT
         ).apply {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 add(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
@@ -107,6 +109,8 @@ class MediaRepository(private val context: Context) {
                 val durationCol = cursor.getColumnIndex(MediaStore.Video.Media.DURATION)
                 val sizeCol = cursor.getColumnIndex(MediaStore.Video.Media.SIZE)
                 val dateCol = cursor.getColumnIndex(MediaStore.Video.Media.DATE_ADDED)
+                val widthCol = cursor.getColumnIndex(MediaStore.Video.Media.WIDTH)
+                val heightCol = cursor.getColumnIndex(MediaStore.Video.Media.HEIGHT)
                 val bucketCol = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                     cursor.getColumnIndex(MediaStore.Video.Media.BUCKET_DISPLAY_NAME)
                 } else -1
@@ -127,6 +131,10 @@ class MediaRepository(private val context: Context) {
                     val sizeBytes = if (sizeCol != -1) cursor.getLong(sizeCol) else 0L
                     val dateAddedSec = if (dateCol != -1) cursor.getLong(dateCol) else 0L
                     val dateAdded = if (dateAddedSec > 0) dateAddedSec * 1000L else System.currentTimeMillis()
+                    val width = if (widthCol != -1) cursor.getInt(widthCol) else 0
+                    val height = if (heightCol != -1) cursor.getInt(heightCol) else 0
+
+                    val resolutionText = extractVideoResolution(width, height)
 
                     var folderName = "Downloaded Video"
                     if (bucketCol != -1) {
@@ -153,7 +161,7 @@ class MediaRepository(private val context: Context) {
                             formattedSize = formatFileSize(sizeBytes),
                             dateAdded = dateAdded,
                             dateGroup = getDateGroupLabel(dateAdded),
-                            resolutionOrBitrate = "1080p · Local",
+                            resolutionOrBitrate = resolutionText,
                             folderName = folderName,
                             thumbnailGradientIndex = (id % 5).toInt(),
                             clipDescription = "Local video file"
@@ -227,6 +235,8 @@ class MediaRepository(private val context: Context) {
                         } catch (_: Exception) {}
                     }
 
+                    val qualityText = extractAudioQuality(sizeBytes, durationMs)
+
                     scanned.add(
                         MediaItem(
                             title = title,
@@ -239,7 +249,7 @@ class MediaRepository(private val context: Context) {
                             formattedSize = formatFileSize(sizeBytes),
                             dateAdded = dateAdded,
                             dateGroup = getDateGroupLabel(dateAdded),
-                            resolutionOrBitrate = "Local Audio",
+                            resolutionOrBitrate = qualityText,
                             folderName = folderName,
                             thumbnailGradientIndex = (id % 5).toInt(),
                             clipDescription = "Local audio file"
@@ -292,6 +302,10 @@ class MediaRepository(private val context: Context) {
 
     suspend fun createPlaylist(name: String, colorHex: String, type: String) {
         playlistDao.insertPlaylist(PlaylistEntity(name = name, coverColorHex = colorHex, type = type))
+    }
+
+    suspend fun updatePlaylist(playlist: PlaylistEntity) {
+        playlistDao.updatePlaylist(playlist)
     }
 
     suspend fun deletePlaylist(id: Long) = playlistDao.deletePlaylist(id)
@@ -443,6 +457,38 @@ class MediaRepository(private val context: Context) {
                 clipDescription = "A quick 60-second video reminder on maintaining gentle speech and helping neighbours."
             )
         )
+    }
+
+    private fun extractVideoResolution(width: Int, height: Int): String {
+        val maxDim = maxOf(width, height)
+        val minDim = minOf(width, height)
+        return when {
+            minDim >= 2160 || maxDim >= 3840 -> "4K · Ultra HD"
+            minDim >= 1440 || maxDim >= 2560 -> "1440p · 2K"
+            minDim >= 1080 || maxDim >= 1920 -> "1080p · FHD"
+            minDim >= 720 || maxDim >= 1280 -> "720p · HD"
+            minDim >= 480 || maxDim >= 854 -> "480p · SD"
+            minDim >= 360 -> "360p · SD"
+            minDim > 0 -> "${minDim}p · SD"
+            else -> "1080p · FHD"
+        }
+    }
+
+    private fun extractAudioQuality(sizeBytes: Long, durationMs: Long): String {
+        if (sizeBytes > 0 && durationMs > 0) {
+            val durationSec = durationMs / 1000.0
+            val bps = (sizeBytes * 8.0) / durationSec
+            val kbps = (bps / 1000.0).toInt()
+            return when {
+                kbps >= 320 -> "320 kbps · High Quality"
+                kbps >= 256 -> "256 kbps · High Quality"
+                kbps >= 192 -> "192 kbps · HQ Audio"
+                kbps >= 128 -> "128 kbps · Standard"
+                kbps > 0 -> "$kbps kbps"
+                else -> "320 kbps · High Quality"
+            }
+        }
+        return "320 kbps · High Quality"
     }
 
     private fun formatDuration(durationMs: Long): String {

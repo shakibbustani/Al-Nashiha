@@ -32,57 +32,59 @@ fun HomeScreen(
 
     var isSearchActive by remember { mutableStateOf(false) }
 
-    if (isSearchActive) {
-        SearchScreen(
-            viewModel = viewModel,
-            onBack = { isSearchActive = false }
-        )
-    } else {
-        Scaffold(
-            topBar = {
-                if (bottomNav == 0) { // Only show Top Nav & Top Tabs on Home screen
-                    Column {
-                        TopNavBar(onSearchClick = { isSearchActive = true })
-                        TopTabBar(
-                            selectedTab = topTab,
-                            onTabSelected = { viewModel.currentTopTab.value = it }
-                        )
-                    }
-                }
-            },
-            bottomBar = {
-                BottomNavBar(
-                    selectedNav = bottomNav,
-                    onNavSelected = { viewModel.currentBottomNav.value = it }
-                )
-            },
-            modifier = modifier.testTag("home_screen")
-        ) { innerPadding ->
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-                    .background(MaterialTheme.colorScheme.background)
-            ) {
-                when (bottomNav) {
-                    0 -> { // Home Tab
-                        when (topTab) {
-                            0 -> MediaTab(viewModel = viewModel)
-                            1 -> SafeBoxTab(viewModel = viewModel)
-                            2 -> PlaylistTab(viewModel = viewModel)
-                            3 -> HistoryTab(viewModel = viewModel)
+    Box(modifier = modifier.fillMaxSize()) {
+        if (isSearchActive) {
+            SearchScreen(
+                viewModel = viewModel,
+                onBack = { isSearchActive = false }
+            )
+        } else {
+            Scaffold(
+                topBar = {
+                    if (bottomNav == 0) { // Only show Top Nav & Top Tabs on Home screen
+                        Column {
+                            TopNavBar(onSearchClick = { isSearchActive = true })
+                            TopTabBar(
+                                selectedTab = topTab,
+                                onTabSelected = { viewModel.currentTopTab.value = it }
+                            )
                         }
                     }
-                    1 -> ClipsScreen(viewModel = viewModel)
-                    2 -> FolderScreen(viewModel = viewModel)
-                    3 -> SettingsScreen(viewModel = viewModel)
-                }
-
-                // Fullscreen Player Overlay if media is playing
-                if (activePlayingMedia != null) {
-                    MediaPlayerOverlay(viewModel = viewModel)
+                },
+                bottomBar = {
+                    BottomNavBar(
+                        selectedNav = bottomNav,
+                        onNavSelected = { viewModel.currentBottomNav.value = it }
+                    )
+                },
+                modifier = Modifier.testTag("home_screen")
+            ) { innerPadding ->
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                        .background(MaterialTheme.colorScheme.background)
+                ) {
+                    when (bottomNav) {
+                        0 -> { // Home Tab
+                            when (topTab) {
+                                0 -> MediaTab(viewModel = viewModel)
+                                1 -> SafeBoxTab(viewModel = viewModel)
+                                2 -> PlaylistTab(viewModel = viewModel)
+                                3 -> HistoryTab(viewModel = viewModel)
+                            }
+                        }
+                        1 -> ClipsScreen(viewModel = viewModel)
+                        2 -> FolderScreen(viewModel = viewModel)
+                        3 -> SettingsScreen(viewModel = viewModel)
+                    }
                 }
             }
+        }
+
+        // Fullscreen Player Overlay if media is playing (Visible on SearchScreen & Main Screens)
+        if (activePlayingMedia != null) {
+            MediaPlayerOverlay(viewModel = viewModel)
         }
     }
 }

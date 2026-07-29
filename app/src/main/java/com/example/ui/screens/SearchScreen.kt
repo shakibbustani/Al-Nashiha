@@ -5,6 +5,7 @@ import android.speech.RecognizerIntent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,16 +18,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.History
@@ -72,6 +72,7 @@ fun SearchScreen(
     modifier: Modifier = Modifier
 ) {
     val query by viewModel.searchQuery.collectAsState()
+    val activeFilter by viewModel.selectedFilter.collectAsState()
     val searchResults by viewModel.filteredMedia.collectAsState()
 
     val recentSearches = remember {
@@ -91,10 +92,11 @@ fun SearchScreen(
         modifier = modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .padding(16.dp)
+            .statusBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
             .testTag("search_screen")
     ) {
-        // Top Search Bar Row
+        // Top Search Bar Row (Padded below status bar)
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically
@@ -161,17 +163,29 @@ fun SearchScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
-        if (query.isNotEmpty()) {
-            // Live Search Results
-            Text(
-                text = "SEARCH RESULTS (${searchResults.size})",
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Bold,
-                color = RedPrimary,
-                letterSpacing = 1.sp
-            )
+        if (query.isNotEmpty() || activeFilter != FilterType.ALL) {
+            // Live Search Results & Filtered items
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "RESULTS (${searchResults.size}) · ${activeFilter.name}",
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = RedPrimary,
+                    letterSpacing = 1.sp
+                )
+
+                if (activeFilter != FilterType.ALL) {
+                    TextButton(onClick = { viewModel.selectedFilter.value = FilterType.ALL }) {
+                        Text("Reset Filter", color = RedPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -180,7 +194,7 @@ fun SearchScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text("No results match '$query'", color = Color.Gray)
+                    Text("No results match query or active filter", color = Color.Gray)
                 }
             } else {
                 LazyColumn(
@@ -232,7 +246,7 @@ fun SearchScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .clickable { viewModel.searchQuery.value = term }
-                                        .padding(vertical = 10.dp),
+                                        .padding(vertical = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
@@ -310,7 +324,7 @@ fun SearchScreen(
                     }
                 }
 
-                // Search by Category (2x2 Grid)
+                // Search by Category (Interactive Grid with Highlighting)
                 item {
                     Column {
                         Text(
@@ -339,14 +353,20 @@ fun SearchScreen(
                                     title = categories[0].first,
                                     icon = categories[0].second,
                                     gradient = categories[0].third,
-                                    onClick = { viewModel.selectedFilter.value = FilterType.VIDEO },
+                                    isSelected = activeFilter == FilterType.VIDEO,
+                                    onClick = {
+                                        viewModel.selectedFilter.value = if (activeFilter == FilterType.VIDEO) FilterType.ALL else FilterType.VIDEO
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                                 CategoryCard(
                                     title = categories[1].first,
                                     icon = categories[1].second,
                                     gradient = categories[1].third,
-                                    onClick = { viewModel.selectedFilter.value = FilterType.AUDIO },
+                                    isSelected = activeFilter == FilterType.AUDIO,
+                                    onClick = {
+                                        viewModel.selectedFilter.value = if (activeFilter == FilterType.AUDIO) FilterType.ALL else FilterType.AUDIO
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -358,14 +378,23 @@ fun SearchScreen(
                                     title = categories[2].first,
                                     icon = categories[2].second,
                                     gradient = categories[2].third,
-                                    onClick = {},
+                                    isSelected = viewModel.currentBottomNav.value == 2,
+                                    onClick = {
+                                        onBack()
+                                        viewModel.currentBottomNav.value = 2
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                                 CategoryCard(
                                     title = categories[3].first,
                                     icon = categories[3].second,
                                     gradient = categories[3].third,
-                                    onClick = {},
+                                    isSelected = viewModel.currentTopTab.value == 2,
+                                    onClick = {
+                                        onBack()
+                                        viewModel.currentBottomNav.value = 0
+                                        viewModel.currentTopTab.value = 2
+                                    },
                                     modifier = Modifier.weight(1f)
                                 )
                             }
@@ -382,26 +411,55 @@ fun CategoryCard(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     gradient: List<Color>,
+    isSelected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier
             .aspectRatio(2.2f)
+            .border(
+                width = if (isSelected) 3.dp else 0.dp,
+                color = if (isSelected) RedPrimary else Color.Transparent,
+                shape = RoundedCornerShape(12.dp)
+            )
             .clickable { onClick() },
-        shape = RoundedCornerShape(12.dp)
+        shape = RoundedCornerShape(12.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = if (isSelected) 6.dp else 2.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(Brush.horizontalGradient(gradient))
-                .padding(16.dp),
+                .padding(12.dp),
             contentAlignment = Alignment.CenterStart
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
-                Spacer(modifier = Modifier.width(12.dp))
-                Text(text = title, fontSize = 16.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Icon(icon, contentDescription = null, tint = Color.White, modifier = Modifier.size(26.dp))
+                Spacer(modifier = Modifier.width(10.dp))
+                Text(
+                    text = title,
+                    fontSize = 15.sp,
+                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+
+            if (isSelected) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.TopEnd)
+                        .clip(CircleShape)
+                        .background(Color.White)
+                        .padding(3.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = RedPrimary,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
             }
         }
     }

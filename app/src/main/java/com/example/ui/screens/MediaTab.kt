@@ -416,6 +416,7 @@ fun MediaTab(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .clickable {
+                                        viewModel.addMediaToPlaylist(playlist.id, item.id)
                                         selectedItemForPlaylist = null
                                     }
                                     .padding(vertical = 12.dp),

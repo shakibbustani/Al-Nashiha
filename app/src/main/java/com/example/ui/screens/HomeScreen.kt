@@ -54,7 +54,12 @@ fun HomeScreen(
                 bottomBar = {
                     BottomNavBar(
                         selectedNav = bottomNav,
-                        onNavSelected = { viewModel.currentBottomNav.value = it }
+                        onNavSelected = { nav ->
+                            if (nav == 1) {
+                                viewModel.onClipsTabSelected()
+                            }
+                            viewModel.currentBottomNav.value = nav
+                        }
                     )
                 },
                 modifier = Modifier.testTag("home_screen")

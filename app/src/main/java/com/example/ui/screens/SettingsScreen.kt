@@ -279,7 +279,10 @@ fun SettingsScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .clickable { cacheClearedToast = true }
+                            .clickable {
+                                viewModel.clearMediaCache()
+                                cacheClearedToast = true
+                            }
                             .padding(16.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically

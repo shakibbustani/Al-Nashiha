@@ -186,7 +186,8 @@ class MediaRepository(private val context: Context) {
                             resolutionOrBitrate = resolutionText,
                             folderName = folderName,
                             thumbnailGradientIndex = (id % 5).toInt(),
-                            clipDescription = "Local video file"
+                            clipDescription = "Local video file",
+                            isPortrait = (height >= width) || (width == 0 && height == 0)
                         )
                     )
                 }
@@ -338,6 +339,18 @@ class MediaRepository(private val context: Context) {
 
     suspend fun deleteFolder(id: Long) = folderDao.deleteFolder(id)
 
+    suspend fun toggleFavorite(id: Long, isFavorite: Boolean) {
+        mediaDao.updateFavorite(id, isFavorite)
+    }
+
+    suspend fun incrementLikes(id: Long) {
+        mediaDao.incrementLikes(id)
+    }
+
+    suspend fun resetLikesAndCache() {
+        mediaDao.resetAllLikes()
+    }
+
     suspend fun updateSettings(settings: AppSettingsEntity) = settingsDao.saveSettings(settings)
 
     private fun createInitialSampleItems(): List<MediaItem> {
@@ -362,7 +375,28 @@ class MediaRepository(private val context: Context) {
                 isLocked = false,
                 folderName = "Quran Recitations",
                 thumbnailGradientIndex = 0,
-                clipDescription = "Beautiful Tilawat of Surah Ar-Rahman with English subtitles. Listen for peace of heart."
+                clipDescription = "Beautiful Tilawat of Surah Ar-Rahman with English subtitles. Listen for peace of heart.",
+                isPortrait = false
+            ),
+            MediaItem(
+                title = "Short Reminder: Power of Istighfar & Patience",
+                path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+                mediaType = MediaType.VIDEO,
+                durationMs = 120000,
+                formattedDuration = "02:00",
+                sizeBytes = 18000000,
+                formattedSize = "17.1 MB",
+                dateAdded = now - (1 * 3600 * 1000L),
+                dateGroup = "TODAY",
+                resolutionOrBitrate = "1080p · 60fps",
+                progressRatio = 0.0f,
+                lastPositionMs = 0L,
+                isLocked = false,
+                folderName = "Lectures & Bayan",
+                thumbnailGradientIndex = 2,
+                clipDescription = "A 2-minute inspiring portrait reminder on seeking forgiveness and trusting Allah's timing.",
+                isPortrait = true
             ),
             MediaItem(
                 title = "Understanding the Purpose of Life - Comprehensive Bayan",
@@ -381,7 +415,8 @@ class MediaRepository(private val context: Context) {
                 isLocked = false,
                 folderName = "Lectures & Bayan",
                 thumbnailGradientIndex = 1,
-                clipDescription = "An inspiring discourse on faith, gratitude, and moral excellence in everyday life."
+                clipDescription = "An inspiring discourse on faith, gratitude, and moral excellence in everyday life.",
+                isPortrait = false
             ),
             MediaItem(
                 title = "Morning & Evening Zikr (Adhkar) Audio Track",
@@ -403,61 +438,44 @@ class MediaRepository(private val context: Context) {
                 clipDescription = "Daily essential remembrance of Allah with clear acoustic sound."
             ),
             MediaItem(
-                title = "Seerat-un-Nabi Episode 1 - Light of Guidance",
-                path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
-                mediaType = MediaType.VIDEO,
-                durationMs = 930000,
-                formattedDuration = "15:30",
-                sizeBytes = 88000000,
-                formattedSize = "83.9 MB",
-                dateAdded = now - oneDay,
-                dateGroup = "YESTERDAY",
-                resolutionOrBitrate = "1080p · 30fps",
-                progressRatio = 0.5f,
-                lastPositionMs = 465000,
-                isLocked = false,
-                folderName = "Lectures & Bayan",
-                thumbnailGradientIndex = 3,
-                clipDescription = "First chapter exploring the noble life and character of Prophet Muhammad (PBUH)."
-            ),
-            MediaItem(
-                title = "Surah Al-Kahf - Friday Special Recitation",
+                title = "Daily Quranic Wisdom - Surah Al-Baqarah Ayah 152",
                 path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
                 uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerEscapes.mp4",
                 mediaType = MediaType.VIDEO,
-                durationMs = 1260000,
-                formattedDuration = "21:00",
-                sizeBytes = 110000000,
-                formattedSize = "104.9 MB",
-                dateAdded = now - (3 * oneDay),
-                dateGroup = "3 DAYS AGO",
+                durationMs = 180000,
+                formattedDuration = "03:00",
+                sizeBytes = 25000000,
+                formattedSize = "23.8 MB",
+                dateAdded = now - (8 * 3600 * 1000L),
+                dateGroup = "TODAY",
                 resolutionOrBitrate = "1080p · 60fps",
                 progressRatio = 0.0f,
                 lastPositionMs = 0L,
                 isLocked = false,
                 folderName = "Quran Recitations",
-                thumbnailGradientIndex = 4,
-                clipDescription = "Complete Tilawat of Surah Al-Kahf for Jummah blessing."
+                thumbnailGradientIndex = 3,
+                clipDescription = "3-minute short clip explaining 'Remember Me and I will remember you'.",
+                isPortrait = true
             ),
             MediaItem(
-                title = "Private Financial & Personal Notes Video",
-                path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
-                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerFun.mp4",
+                title = "3 Min Bayan: Beauty of Sincerity (Ikhlas)",
+                path = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
+                uriString = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4",
                 mediaType = MediaType.VIDEO,
-                durationMs = 240000,
-                formattedDuration = "04:00",
-                sizeBytes = 22000000,
-                formattedSize = "21.0 MB",
-                dateAdded = now - (4 * oneDay),
-                dateGroup = "EARLIER",
-                resolutionOrBitrate = "720p · 30fps",
-                progressRatio = 0.1f,
-                lastPositionMs = 24000,
-                isLocked = true, // SAFE BOX CONTENT
-                folderName = "Safe Box",
-                thumbnailGradientIndex = 0,
-                clipDescription = "Confidential document overview record."
+                durationMs = 210000,
+                formattedDuration = "03:30",
+                sizeBytes = 31000000,
+                formattedSize = "29.5 MB",
+                dateAdded = now - oneDay,
+                dateGroup = "YESTERDAY",
+                resolutionOrBitrate = "1080p · 30fps",
+                progressRatio = 0.0f,
+                lastPositionMs = 0L,
+                isLocked = false,
+                folderName = "Lectures & Bayan",
+                thumbnailGradientIndex = 4,
+                clipDescription = "Deep spiritual message on purifying intention in all good deeds.",
+                isPortrait = true
             ),
             MediaItem(
                 title = "Short Reminders - Good Manners & Kindness in Islam",
@@ -476,7 +494,8 @@ class MediaRepository(private val context: Context) {
                 isLocked = false,
                 folderName = "Downloaded Video",
                 thumbnailGradientIndex = 1,
-                clipDescription = "A quick 60-second video reminder on maintaining gentle speech and helping neighbours."
+                clipDescription = "A quick 60-second video reminder on maintaining gentle speech and helping neighbours.",
+                isPortrait = true
             )
         )
     }

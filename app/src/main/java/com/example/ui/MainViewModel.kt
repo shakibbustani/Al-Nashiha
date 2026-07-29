@@ -59,6 +59,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     val currentTopTab = MutableStateFlow(0) // 0=Media, 1=SafeBox, 2=Playlist, 3=History
     val currentBottomNav = MutableStateFlow(0) // 0=Home, 1=Clips, 2=Folder, 3=Setting
+    val clipsShuffleTrigger = MutableStateFlow(System.currentTimeMillis())
+
+    fun onClipsTabSelected() {
+        clipsShuffleTrigger.value = System.currentTimeMillis()
+    }
 
     val filteredMedia: StateFlow<List<MediaItem>> = combine(
         unlockedMedia,
@@ -255,6 +260,24 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun updateSettings(newSettings: AppSettingsEntity) {
         viewModelScope.launch {
             repository.updateSettings(newSettings)
+        }
+    }
+
+    fun toggleFavorite(item: MediaItem) {
+        viewModelScope.launch {
+            repository.toggleFavorite(item.id, !item.isFavorite)
+        }
+    }
+
+    fun incrementLikes(itemId: Long) {
+        viewModelScope.launch {
+            repository.incrementLikes(itemId)
+        }
+    }
+
+    fun clearMediaCache() {
+        viewModelScope.launch {
+            repository.resetLikesAndCache()
         }
     }
 }

@@ -18,7 +18,7 @@ import com.example.data.model.PlaylistEntity
         FolderEntity::class,
         AppSettingsEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

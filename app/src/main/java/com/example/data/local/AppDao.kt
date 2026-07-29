@@ -47,6 +47,15 @@ interface MediaDao {
     @Query("UPDATE media_items SET lastPositionMs = :positionMs, progressRatio = :progress WHERE id = :id")
     suspend fun updatePlaybackProgress(id: Long, positionMs: Long, progress: Float)
 
+    @Query("UPDATE media_items SET isFavorite = :isFavorite WHERE id = :id")
+    suspend fun updateFavorite(id: Long, isFavorite: Boolean)
+
+    @Query("UPDATE media_items SET likesCount = likesCount + 1 WHERE id = :id")
+    suspend fun incrementLikes(id: Long)
+
+    @Query("UPDATE media_items SET likesCount = 0")
+    suspend fun resetAllLikes()
+
     @Query("DELETE FROM media_items WHERE id = :id")
     suspend fun deleteMedia(id: Long)
 

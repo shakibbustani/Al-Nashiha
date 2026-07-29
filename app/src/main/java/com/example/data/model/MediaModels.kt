@@ -28,7 +28,8 @@ data class MediaItem(
     val isFavorite: Boolean = false,
     val likesCount: Int = 124,
     val thumbnailGradientIndex: Int = 0,
-    val clipDescription: String = ""
+    val clipDescription: String = "",
+    val isPortrait: Boolean = true
 )
 
 @Entity(tableName = "playlists")

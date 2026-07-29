@@ -21,11 +21,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
@@ -155,24 +157,72 @@ fun ClipsScreen(
     modifier: Modifier = Modifier
 ) {
     val mediaItems by viewModel.unlockedMedia.collectAsState()
-    val videoClips = remember(mediaItems) {
+    val shuffleTrigger by viewModel.clipsShuffleTrigger.collectAsState()
+
+    // 1. Filter videos: 1 min (60,000 ms) to 4 mins (240,000 ms)
+    val allVideoItems = remember(mediaItems) {
         mediaItems.filter { it.mediaType == MediaType.VIDEO }
     }
+    val eligibleClips = remember(allVideoItems) {
+        val filtered = allVideoItems.filter { item ->
+            item.durationMs == 0L || item.durationMs in 60_000L..240_000L
+        }
+        if (filtered.isNotEmpty()) filtered else allVideoItems
+    }
 
-    var selectedTopTab by remember { mutableIntStateOf(0) } // 0=All Video, 1=Favorite, 2=For You
+    // Top Tabs: 0 = "All Video", 1 = "Favorite", 2 = "For You" (Default is 2: "For You")
+    var selectedTopTab by remember { mutableIntStateOf(2) }
     val topTabs = listOf("All Video", "Favorite", "For You")
 
-    if (videoClips.isEmpty()) {
+    // Random shuffle state for For You tab
+    var shuffledForYouIds by remember { mutableStateOf<List<Long>>(emptyList()) }
+
+    // Re-shuffle For You list on app open, bottom nav tab click (shuffleTrigger), or pull refresh
+    LaunchedEffect(shuffleTrigger, eligibleClips) {
+        val forYouPortraitClips = eligibleClips.filter { it.isPortrait }
+        val clipsToShuffle = if (forYouPortraitClips.isNotEmpty()) forYouPortraitClips else eligibleClips
+        shuffledForYouIds = clipsToShuffle.map { it.id }.shuffled()
+    }
+
+    // Active list based on selected top tab
+    val currentDisplayClips = remember(selectedTopTab, eligibleClips, shuffledForYouIds) {
+        when (selectedTopTab) {
+            0 -> eligibleClips // All Video (Portrait + Landscape, 1-4 mins)
+            1 -> eligibleClips.filter { it.isFavorite } // Favorite tab
+            2 -> { // For You (Portrait, 1-4 mins, Shuffled)
+                val map = eligibleClips.associateBy { it.id }
+                val shuffledList = shuffledForYouIds.mapNotNull { map[it] }
+                if (shuffledList.isNotEmpty()) shuffledList else eligibleClips.filter { it.isPortrait }.ifEmpty { eligibleClips }
+            }
+            else -> eligibleClips
+        }
+    }
+
+    if (currentDisplayClips.isEmpty()) {
         Box(
             modifier = modifier
                 .fillMaxSize()
                 .background(Color.Black),
             contentAlignment = Alignment.Center
         ) {
-            Text("No video clips available.", color = Color.White)
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = if (selectedTopTab == 1) "No favorite clips saved yet." else "No video clips available (1-4 min).",
+                    color = Color.White,
+                    fontSize = 14.sp
+                )
+                if (selectedTopTab == 1) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Tap the bookmark icon on any clip to save it here.",
+                        color = Color.Gray,
+                        fontSize = 12.sp
+                    )
+                }
+            }
         }
     } else {
-        val pagerState = rememberPagerState(pageCount = { videoClips.size })
+        val pagerState = rememberPagerState(pageCount = { currentDisplayClips.size })
 
         Box(
             modifier = modifier
@@ -184,22 +234,23 @@ fun ClipsScreen(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
             ) { page ->
-                val clip = videoClips[page]
-                var isLiked by remember { mutableStateOf(clip.isFavorite) }
-                var likeCount by remember { mutableIntStateOf(clip.likesCount) }
-                var isSaved by remember { mutableStateOf(false) }
+                val clip = currentDisplayClips.getOrNull(page) ?: return@VerticalPager
                 var showUIControls by remember { mutableStateOf(true) }
                 var isPlaying by remember { mutableStateOf(true) }
-                var sliderPosition by remember { mutableFloatStateOf(0.35f) }
-
-                val gradientColors = GradientPalettes[clip.thumbnailGradientIndex % GradientPalettes.size]
+                var sliderPosition by remember { mutableFloatStateOf(0.0f) }
 
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .clickable { isPlaying = !isPlaying }
+                        .clickable {
+                            if (!showUIControls) {
+                                showUIControls = true
+                            } else {
+                                isPlaying = !isPlaying
+                            }
+                        }
                 ) {
-                    // Real ExoPlayer Video Canvas
+                    // Real ExoPlayer Video Player
                     ClipVideoPlayer(
                         clip = clip,
                         isPlaying = isPlaying,
@@ -207,22 +258,22 @@ fun ClipsScreen(
                     )
 
                     if (showUIControls) {
-                        // Gradient Overlay for readability
+                        // Top & Bottom Gradient Overlays for high readability
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .background(
                                     Brush.verticalGradient(
                                         colors = listOf(
-                                            Color.Black.copy(alpha = 0.4f),
+                                            Color.Black.copy(alpha = 0.5f),
                                             Color.Transparent,
-                                            Color.Black.copy(alpha = 0.7f)
+                                            Color.Black.copy(alpha = 0.75f)
                                         )
                                     )
                                 )
                         )
 
-                        // Right Action Rail
+                        // Right Action Rail (Heart Like, Save Favorite, Hide UI, Refresh)
                         Column(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
@@ -230,54 +281,55 @@ fun ClipsScreen(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(20.dp)
                         ) {
-                            // Like
+                            // 1. Heart (Like) Icon - Starts at 0 or stored count, each click adds +1 to cumulative likes
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 IconButton(
                                     onClick = {
-                                        isLiked = !isLiked
-                                        if (isLiked) likeCount++ else likeCount--
+                                        viewModel.incrementLikes(clip.id)
                                     },
                                     modifier = Modifier
                                         .size(48.dp)
                                         .clip(CircleShape)
-                                        .background(Color.Black.copy(alpha = 0.4f))
+                                        .background(Color.Black.copy(alpha = 0.45f))
                                 ) {
                                     Icon(
-                                        imageVector = if (isLiked) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                        imageVector = if (clip.likesCount > 0) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                         contentDescription = "Like",
-                                        tint = if (isLiked) RedPrimary else Color.White
+                                        tint = if (clip.likesCount > 0) RedPrimary else Color.White
                                     )
                                 }
                                 Text(
-                                    text = "$likeCount",
+                                    text = "${clip.likesCount}",
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
 
-                            // Save
+                            // 2. Save / Bookmark Icon - Toggles favorite status for Favorite Tab
                             IconButton(
-                                onClick = { isSaved = !isSaved },
+                                onClick = {
+                                    viewModel.toggleFavorite(clip)
+                                },
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.4f))
+                                    .background(Color.Black.copy(alpha = 0.45f))
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.BookmarkBorder,
-                                    contentDescription = "Save",
-                                    tint = if (isSaved) RedPrimary else Color.White
+                                    imageVector = if (clip.isFavorite) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                                    contentDescription = "Save Favorite",
+                                    tint = if (clip.isFavorite) RedPrimary else Color.White
                                 )
                             }
 
-                            // Toggle UI Clear
+                            // 3. Eye Icon (Hide UI) - Clears screen UI controls for unobstructed video viewing
                             IconButton(
                                 onClick = { showUIControls = false },
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.4f))
+                                    .background(Color.Black.copy(alpha = 0.45f))
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.VisibilityOff,
@@ -286,13 +338,30 @@ fun ClipsScreen(
                                 )
                             }
 
-                            // Share
+                            // 4. Refresh / Reshuffle Button (For You Tab Refresh)
+                            if (selectedTopTab == 2) {
+                                IconButton(
+                                    onClick = { viewModel.onClipsTabSelected() },
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Black.copy(alpha = 0.45f))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = "Refresh Feed",
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+
+                            // Share & More
                             IconButton(
                                 onClick = {},
                                 modifier = Modifier
                                     .size(48.dp)
                                     .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.4f))
+                                    .background(Color.Black.copy(alpha = 0.45f))
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Share,
@@ -300,24 +369,9 @@ fun ClipsScreen(
                                     tint = Color.White
                                 )
                             }
-
-                            // More
-                            IconButton(
-                                onClick = {},
-                                modifier = Modifier
-                                    .size(48.dp)
-                                    .clip(CircleShape)
-                                    .background(Color.Black.copy(alpha = 0.4f))
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.MoreVert,
-                                    contentDescription = "More",
-                                    tint = Color.White
-                                )
-                            }
                         }
 
-                        // Bottom-Left Overlay
+                        // Bottom-Left Video Title & Description Overlay
                         Column(
                             modifier = Modifier
                                 .align(Alignment.BottomStart)
@@ -356,7 +410,7 @@ fun ClipsScreen(
                             )
                         }
 
-                        // Bottom Draggable Seek Bar
+                        // Bottom Seek Progress Bar
                         Slider(
                             value = sliderPosition,
                             onValueChange = { sliderPosition = it },
@@ -372,14 +426,14 @@ fun ClipsScreen(
                             )
                         )
                     } else {
-                        // Unhide UI floating button
+                        // Floating Show UI button when UI is hidden
                         IconButton(
                             onClick = { showUIControls = true },
                             modifier = Modifier
                                 .align(Alignment.TopEnd)
-                                .padding(16.dp)
+                                .padding(top = 16.dp, end = 16.dp)
                                 .clip(CircleShape)
-                                .background(Color.Black.copy(alpha = 0.4f))
+                                .background(Color.Black.copy(alpha = 0.5f))
                         ) {
                             Icon(
                                 imageVector = Icons.Default.Visibility,
@@ -391,12 +445,13 @@ fun ClipsScreen(
                 }
             }
 
-            // Top Translucent Navigation Tabs
+            // Top Navigation Bar with Tabs in Order: All Video | Favorite | For You
             Row(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .padding(top = 16.dp),
-                horizontalArrangement = Arrangement.spacedBy(20.dp)
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 topTabs.forEachIndexed { index, title ->
                     val isSelected = selectedTopTab == index
@@ -406,7 +461,7 @@ fun ClipsScreen(
                     ) {
                         Text(
                             text = title,
-                            color = if (isSelected) Color.White else Color.LightGray,
+                            color = if (isSelected) Color.White else Color.LightGray.copy(alpha = 0.8f),
                             fontSize = 15.sp,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
                         )

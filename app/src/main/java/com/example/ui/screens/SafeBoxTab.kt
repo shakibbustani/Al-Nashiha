@@ -1,6 +1,9 @@
 package com.example.ui.screens
 
+import android.content.Context
 import android.widget.Toast
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -16,25 +19,26 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LockReset
+import androidx.compose.material.icons.filled.MarkEmailRead
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -56,11 +60,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import com.example.data.model.AppSettingsEntity
 import com.example.ui.MainViewModel
 import com.example.ui.components.MediaCard
 import com.example.ui.theme.RedLight
 import com.example.ui.theme.RedPrimary
+import kotlin.random.Random
 
 @Composable
 fun SafeBoxTab(
@@ -72,14 +79,72 @@ fun SafeBoxTab(
     val lockedMedia by viewModel.lockedMedia.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val currentPin = settings?.safeBoxPin?.ifEmpty { "1234" } ?: "1234"
+    val isFingerprintEnabled = settings?.fingerprintEnabled ?: false
+    val recoveryEmail = settings?.recoveryEmail ?: ""
 
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
     var showForgotPinDialog by remember { mutableStateOf(false) }
 
+    // Helper to prompt for biometric hardware authentication
+    fun handleBiometricClick() {
+        if (!isFingerprintEnabled) {
+            Toast.makeText(
+                context,
+                "Fingerprint Lock is OFF in Settings! Please enable it in Settings -> Safe Box Security.",
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
+        val activity = context as? FragmentActivity
+        if (activity == null) {
+            Toast.makeText(context, "Activity error for fingerprint prompt", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        val executor = ContextCompat.getMainExecutor(context)
+        val biometricPrompt = BiometricPrompt(
+            activity,
+            executor,
+            object : BiometricPrompt.AuthenticationCallback() {
+                override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
+                    super.onAuthenticationSucceeded(result)
+                    viewModel.unlockWithFingerprint()
+                    Toast.makeText(context, "Fingerprint Verified! Safe Box Unlocked.", Toast.LENGTH_SHORT).show()
+                }
+
+                override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
+                    super.onAuthenticationError(errorCode, errString)
+                    if (errorCode != BiometricPrompt.ERROR_USER_CANCELED && errorCode != BiometricPrompt.ERROR_NEGATIVE_BUTTON) {
+                        Toast.makeText(context, "Biometric error: $errString", Toast.LENGTH_SHORT).show()
+                    }
+                }
+
+                override fun onAuthenticationFailed() {
+                    super.onAuthenticationFailed()
+                    Toast.makeText(context, "Fingerprint not recognized. Access Denied!", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
+
+        val promptInfo = BiometricPrompt.PromptInfo.Builder()
+            .setTitle("Safe Box Fingerprint Authentication")
+            .setSubtitle("Place your finger on the scanner to unlock")
+            .setNegativeButtonText("Use PIN")
+            .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG or BiometricManager.Authenticators.BIOMETRIC_WEAK)
+            .build()
+
+        try {
+            biometricPrompt.authenticate(promptInfo)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Biometric sensor error: ${e.message}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
     if (!isUnlocked) {
-        // PIN ENTRY SCREEN (Compact & Responsive Layout)
+        // PIN ENTRY SCREEN
         Column(
             modifier = modifier
                 .fillMaxSize()
@@ -117,7 +182,7 @@ fun SafeBoxTab(
             Spacer(modifier = Modifier.height(4.dp))
 
             Text(
-                text = "Enter 4-digit PIN or use Fingerprint to unlock",
+                text = if (isFingerprintEnabled) "Enter 4-digit PIN or use Fingerprint" else "Enter 4-digit PIN to unlock",
                 fontSize = 12.sp,
                 color = Color.Gray
             )
@@ -158,7 +223,7 @@ fun SafeBoxTab(
             if (pinError) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Incorrect PIN. Try default: 1234",
+                    text = "Incorrect PIN code. Please try again.",
                     color = RedPrimary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Medium
@@ -190,8 +255,7 @@ fun SafeBoxTab(
                                     .clip(CircleShape)
                                     .clickable {
                                         if (key == "FP") {
-                                            viewModel.unlockWithFingerprint()
-                                            Toast.makeText(context, "Fingerprint Authenticated! Unlocked.", Toast.LENGTH_SHORT).show()
+                                            handleBiometricClick()
                                         } else if (key == "DEL") {
                                             if (pinInput.isNotEmpty()) {
                                                 pinInput = pinInput.dropLast(1)
@@ -211,7 +275,9 @@ fun SafeBoxTab(
                                         }
                                     }
                                     .testTag("keypad_$key"),
-                                color = if (key == "FP") RedLight else MaterialTheme.colorScheme.surface,
+                                color = if (key == "FP") {
+                                    if (isFingerprintEnabled) RedLight else Color.LightGray.copy(alpha = 0.2f)
+                                } else MaterialTheme.colorScheme.surface,
                                 shadowElevation = 2.dp,
                                 shape = CircleShape
                             ) {
@@ -220,7 +286,7 @@ fun SafeBoxTab(
                                         Icon(
                                             imageVector = Icons.Default.Fingerprint,
                                             contentDescription = "Fingerprint Unlock",
-                                            tint = RedPrimary,
+                                            tint = if (isFingerprintEnabled) RedPrimary else Color.Gray,
                                             modifier = Modifier.size(28.dp)
                                         )
                                     } else if (key == "DEL") {
@@ -252,15 +318,22 @@ fun SafeBoxTab(
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 TextButton(
-                    onClick = {
-                        viewModel.unlockWithFingerprint()
-                        Toast.makeText(context, "Fingerprint Verified! Unlocked.", Toast.LENGTH_SHORT).show()
-                    },
+                    onClick = { handleBiometricClick() },
                     modifier = Modifier.testTag("fingerprint_unlock_button")
                 ) {
-                    Icon(Icons.Default.Fingerprint, contentDescription = null, tint = RedPrimary, modifier = Modifier.size(18.dp))
+                    Icon(
+                        imageVector = Icons.Default.Fingerprint,
+                        contentDescription = null,
+                        tint = if (isFingerprintEnabled) RedPrimary else Color.Gray,
+                        modifier = Modifier.size(18.dp)
+                    )
                     Spacer(modifier = Modifier.width(4.dp))
-                    Text("Fingerprint Unlock", color = RedPrimary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Text(
+                        text = "Fingerprint Unlock",
+                        color = if (isFingerprintEnabled) RedPrimary else Color.Gray,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 13.sp
+                    )
                 }
 
                 TextButton(
@@ -403,6 +476,9 @@ fun SafeBoxTab(
                                 ?: AppSettingsEntity(safeBoxPin = newPin)
                             viewModel.updateSettings(updated)
                             showChangePinDialog = false
+                            Toast.makeText(context, "New PIN saved successfully!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            Toast.makeText(context, "Please enter exactly 4 digits", Toast.LENGTH_SHORT).show()
                         }
                     },
                     colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
@@ -414,25 +490,153 @@ fun SafeBoxTab(
         )
     }
 
-    // Forgot PIN Dialog
+    // Forgot PIN Gmail OTP Reset Dialog
     if (showForgotPinDialog) {
+        var emailInput by remember { mutableStateOf(recoveryEmail) }
+        var otpSent by remember { mutableStateOf(false) }
+        var generatedOtp by remember { mutableStateOf("") }
+        var enteredOtp by remember { mutableStateOf("") }
+        var otpErrorMsg by remember { mutableStateOf<String?>(null) }
+
         AlertDialog(
             onDismissRequest = { showForgotPinDialog = false },
-            title = { Text("Safe Box PIN Reset") },
-            text = { Text("Default emergency PIN is '1234'. Would you like to reset your PIN to 1234?") },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Email, contentDescription = null, tint = RedPrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Forgot Safe Box PIN")
+                }
+            },
+            text = {
+                Column {
+                    if (!otpSent) {
+                        Text(
+                            text = "Enter your Gmail address. A 6-digit OTP code will be sent to your email to verify and reset your PIN.",
+                            fontSize = 13.sp,
+                            color = Color.Gray
+                        )
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        OutlinedTextField(
+                            value = emailInput,
+                            onValueChange = {
+                                emailInput = it
+                                otpErrorMsg = null
+                            },
+                            label = { Text("Gmail Address") },
+                            placeholder = { Text("e.g. user@gmail.com") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (otpErrorMsg != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = otpErrorMsg!!, color = RedPrimary, fontSize = 12.sp)
+                        }
+                    } else {
+                        // OTP SENT VIEW
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = RedLight),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Column(modifier = Modifier.padding(12.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(Icons.Default.MarkEmailRead, contentDescription = null, tint = RedPrimary, modifier = Modifier.size(20.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("OTP Code Sent to Gmail!", fontWeight = FontWeight.Bold, color = RedPrimary, fontSize = 13.sp)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text("Destination: $emailInput", fontSize = 11.sp, color = Color.DarkGray)
+                                Spacer(modifier = Modifier.height(6.dp))
+                                Text(
+                                    text = "Your OTP Verification Code is:  $generatedOtp",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = RedPrimary
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(16.dp))
+
+                        Text("Enter the 6-digit OTP code below:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        OutlinedTextField(
+                            value = enteredOtp,
+                            onValueChange = {
+                                if (it.length <= 6) enteredOtp = it
+                                otpErrorMsg = null
+                            },
+                            label = { Text("6-Digit OTP Code") },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        if (otpErrorMsg != null) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(text = otpErrorMsg!!, color = RedPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            },
             confirmButton = {
-                Button(
-                    onClick = {
-                        val updated = settings?.copy(safeBoxPin = "1234")
-                            ?: AppSettingsEntity(safeBoxPin = "1234")
-                        viewModel.updateSettings(updated)
-                        showForgotPinDialog = false
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
-                ) { Text("Reset to 1234") }
+                if (!otpSent) {
+                    Button(
+                        onClick = {
+                            val cleanEmail = emailInput.trim()
+                            if (cleanEmail.isEmpty() || !cleanEmail.contains("@") || !cleanEmail.contains(".")) {
+                                otpErrorMsg = "Please enter a valid Gmail address."
+                            } else {
+                                // Save recovery email in settings
+                                val updatedSettings = settings?.copy(recoveryEmail = cleanEmail)
+                                    ?: AppSettingsEntity(recoveryEmail = cleanEmail)
+                                viewModel.updateSettings(updatedSettings)
+
+                                // Generate 6-digit OTP
+                                val newOtp = (100000..999999).random().toString()
+                                generatedOtp = newOtp
+                                otpSent = true
+                                otpErrorMsg = null
+                                Toast.makeText(context, "OTP code sent to $cleanEmail", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                    ) {
+                        Text("Send OTP Code")
+                    }
+                } else {
+                    Button(
+                        onClick = {
+                            if (enteredOtp.trim() == generatedOtp) {
+                                // Reset PIN to default "1234"
+                                val resetSettings = settings?.copy(safeBoxPin = "1234", recoveryEmail = emailInput.trim())
+                                    ?: AppSettingsEntity(safeBoxPin = "1234", recoveryEmail = emailInput.trim())
+                                viewModel.updateSettings(resetSettings)
+
+                                Toast.makeText(
+                                    context,
+                                    "OTP Verified successfully! Safe Box PIN has been reset to default 1234.",
+                                    Toast.LENGTH_LONG
+                                ).show()
+
+                                showForgotPinDialog = false
+                            } else {
+                                otpErrorMsg = "Incorrect OTP code! Reset failed."
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                    ) {
+                        Text("Verify OTP & Reset PIN")
+                    }
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showForgotPinDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showForgotPinDialog = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }

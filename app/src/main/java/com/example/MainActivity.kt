@@ -1,10 +1,10 @@
 package com.example
 
 import android.os.Bundle
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.viewModels
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
@@ -17,7 +17,7 @@ import com.example.ui.screens.HomeScreen
 import com.example.ui.screens.SplashScreen
 import com.example.ui.theme.MyApplicationTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
     private val mainViewModel: MainViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {

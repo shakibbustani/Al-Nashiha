@@ -153,6 +153,9 @@ fun SettingsScreen(
 
             // Safe Box Settings
             item {
+                var showEmailDialog by remember { mutableStateOf(false) }
+                var emailInput by remember { mutableStateOf(settings.recoveryEmail) }
+
                 SettingsSectionHeader(title = "SAFE BOX SECURITY", icon = Icons.Default.Lock)
                 Card(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -170,7 +173,59 @@ fun SettingsScreen(
                             checked = settings.fingerprintEnabled,
                             onCheckedChange = { viewModel.updateSettings(settings.copy(fingerprintEnabled = it)) }
                         )
+                        HorizontalDivider(color = Color.LightGray.copy(alpha = 0.3f))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable {
+                                    emailInput = settings.recoveryEmail
+                                    showEmailDialog = true
+                                }
+                                .padding(horizontal = 16.dp, vertical = 14.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "Recovery Gmail (for Forgot PIN)", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Text(
+                                text = if (settings.recoveryEmail.isNotBlank()) settings.recoveryEmail else "Not set (Tap to set)",
+                                fontSize = 13.sp,
+                                color = if (settings.recoveryEmail.isNotBlank()) RedPrimary else Color.Gray,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
+                }
+
+                if (showEmailDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showEmailDialog = false },
+                        title = { Text("Set Recovery Gmail") },
+                        text = {
+                            Column {
+                                Text("Enter your Gmail address to receive OTP when resetting PIN:", fontSize = 13.sp, color = Color.Gray)
+                                Spacer(modifier = Modifier.height(10.dp))
+                                androidx.compose.material3.OutlinedTextField(
+                                    value = emailInput,
+                                    onValueChange = { emailInput = it },
+                                    label = { Text("Gmail Address") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    viewModel.updateSettings(settings.copy(recoveryEmail = emailInput.trim()))
+                                    showEmailDialog = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                            ) { Text("Save Email") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showEmailDialog = false }) { Text("Cancel") }
+                        }
+                    )
                 }
             }
 

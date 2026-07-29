@@ -74,5 +74,6 @@ data class AppSettingsEntity(
     val bgPlay: Boolean = false,
     val safeBoxPin: String = "",
     val autoLockOnBg: Boolean = true,
-    val fingerprintEnabled: Boolean = false
+    val fingerprintEnabled: Boolean = false,
+    val recoveryEmail: String = ""
 )

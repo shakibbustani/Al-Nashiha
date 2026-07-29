@@ -75,17 +75,29 @@ fun SafeBoxTab(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+    val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
     val isUnlocked by viewModel.safeBoxUnlocked.collectAsState()
     val lockedMedia by viewModel.lockedMedia.collectAsState()
     val settings by viewModel.settings.collectAsState()
     val currentPin = settings?.safeBoxPin?.ifEmpty { "1234" } ?: "1234"
     val isFingerprintEnabled = settings?.fingerprintEnabled ?: false
-    val recoveryEmail = settings?.recoveryEmail ?: ""
+
+    val currentRecoveryKey = remember(settings?.recoveryKey) {
+        if (settings?.recoveryKey.isNullOrBlank()) {
+            val genKey = com.example.util.generateRecoveryKey()
+            viewModel.updateSettings((settings ?: AppSettingsEntity()).copy(recoveryKey = genKey))
+            genKey
+        } else {
+            settings?.recoveryKey ?: ""
+        }
+    }
 
     var pinInput by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf(false) }
     var showChangePinDialog by remember { mutableStateOf(false) }
     var showForgotPinDialog by remember { mutableStateOf(false) }
+    var showResetSuccessDialog by remember { mutableStateOf(false) }
+    var newKeyAfterReset by remember { mutableStateOf("") }
 
     // Helper to prompt for biometric hardware authentication
     fun handleBiometricClick() {
@@ -490,152 +502,157 @@ fun SafeBoxTab(
         )
     }
 
-    // Forgot PIN Gmail OTP Reset Dialog
+    // Forgot PIN Offline Recovery Key Dialog
     if (showForgotPinDialog) {
-        var emailInput by remember { mutableStateOf(recoveryEmail) }
-        var otpSent by remember { mutableStateOf(false) }
-        var generatedOtp by remember { mutableStateOf("") }
-        var enteredOtp by remember { mutableStateOf("") }
-        var otpErrorMsg by remember { mutableStateOf<String?>(null) }
+        var keyInput by remember { mutableStateOf("") }
+        var keyErrorMsg by remember { mutableStateOf<String?>(null) }
 
         AlertDialog(
             onDismissRequest = { showForgotPinDialog = false },
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Email, contentDescription = null, tint = RedPrimary)
+                    Icon(Icons.Default.LockReset, contentDescription = null, tint = RedPrimary)
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Forgot Safe Box PIN")
                 }
             },
             text = {
                 Column {
-                    if (!otpSent) {
-                        Text(
-                            text = "Enter your Gmail address. A 6-digit OTP code will be sent to your email to verify and reset your PIN.",
-                            fontSize = 13.sp,
-                            color = Color.Gray
-                        )
+                    Text(
+                        text = "Enter your single-use 16-character Recovery Key (e.g. A7K9-X2M4-P8Q1-Z5R3) to reset your PIN to default (1234):",
+                        fontSize = 13.sp,
+                        color = Color.Gray
+                    )
 
-                        Spacer(modifier = Modifier.height(12.dp))
+                    Spacer(modifier = Modifier.height(14.dp))
 
-                        OutlinedTextField(
-                            value = emailInput,
-                            onValueChange = {
-                                emailInput = it
-                                otpErrorMsg = null
-                            },
-                            label = { Text("Gmail Address") },
-                            placeholder = { Text("e.g. user@gmail.com") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    OutlinedTextField(
+                        value = keyInput,
+                        onValueChange = {
+                            keyInput = it
+                            keyErrorMsg = null
+                        },
+                        label = { Text("Recovery Key / Backup Code") },
+                        placeholder = { Text("A7K9-X2M4-P8Q1-Z5R3") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
 
-                        if (otpErrorMsg != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = otpErrorMsg!!, color = RedPrimary, fontSize = 12.sp)
-                        }
-                    } else {
-                        // OTP SENT VIEW
-                        Card(
-                            colors = CardDefaults.cardColors(containerColor = RedLight),
-                            shape = RoundedCornerShape(10.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.MarkEmailRead, contentDescription = null, tint = RedPrimary, modifier = Modifier.size(20.dp))
-                                    Spacer(modifier = Modifier.width(6.dp))
-                                    Text("OTP Code Sent to Gmail!", fontWeight = FontWeight.Bold, color = RedPrimary, fontSize = 13.sp)
-                                }
-                                Spacer(modifier = Modifier.height(4.dp))
-                                Text("Destination: $emailInput", fontSize = 11.sp, color = Color.DarkGray)
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    text = "Your OTP Verification Code is:  $generatedOtp",
-                                    fontSize = 14.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    color = RedPrimary
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
-
-                        Text("Enter the 6-digit OTP code below:", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                    if (keyErrorMsg != null) {
                         Spacer(modifier = Modifier.height(6.dp))
-
-                        OutlinedTextField(
-                            value = enteredOtp,
-                            onValueChange = {
-                                if (it.length <= 6) enteredOtp = it
-                                otpErrorMsg = null
-                            },
-                            label = { Text("6-Digit OTP Code") },
-                            singleLine = true,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-
-                        if (otpErrorMsg != null) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(text = otpErrorMsg!!, color = RedPrimary, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                        Text(text = keyErrorMsg!!, color = RedPrimary, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             },
             confirmButton = {
-                if (!otpSent) {
-                    Button(
-                        onClick = {
-                            val cleanEmail = emailInput.trim()
-                            if (cleanEmail.isEmpty() || !cleanEmail.contains("@") || !cleanEmail.contains(".")) {
-                                otpErrorMsg = "Please enter a valid Gmail address."
-                            } else {
-                                // Save recovery email in settings
-                                val updatedSettings = settings?.copy(recoveryEmail = cleanEmail)
-                                    ?: AppSettingsEntity(recoveryEmail = cleanEmail)
-                                viewModel.updateSettings(updatedSettings)
+                Button(
+                    onClick = {
+                        val normalizedInput = com.example.util.normalizeKey(keyInput)
+                        val normalizedActiveKey = com.example.util.normalizeKey(currentRecoveryKey)
 
-                                // Generate 6-digit OTP
-                                val newOtp = (100000..999999).random().toString()
-                                generatedOtp = newOtp
-                                otpSent = true
-                                otpErrorMsg = null
-                                Toast.makeText(context, "OTP code sent to $cleanEmail", Toast.LENGTH_SHORT).show()
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
-                    ) {
-                        Text("Send OTP Code")
-                    }
-                } else {
-                    Button(
-                        onClick = {
-                            if (enteredOtp.trim() == generatedOtp) {
-                                // Reset PIN to default "1234"
-                                val resetSettings = settings?.copy(safeBoxPin = "1234", recoveryEmail = emailInput.trim())
-                                    ?: AppSettingsEntity(safeBoxPin = "1234", recoveryEmail = emailInput.trim())
-                                viewModel.updateSettings(resetSettings)
+                        if (normalizedInput.isNotEmpty() && normalizedInput == normalizedActiveKey) {
+                            // Valid Recovery Key! Reset PIN to default 1234 & auto-generate NEW Recovery Key
+                            val brandNewKey = com.example.util.generateRecoveryKey()
+                            val resetSettings = (settings ?: AppSettingsEntity()).copy(
+                                safeBoxPin = "1234",
+                                recoveryKey = brandNewKey
+                            )
+                            viewModel.updateSettings(resetSettings)
 
-                                Toast.makeText(
-                                    context,
-                                    "OTP Verified successfully! Safe Box PIN has been reset to default 1234.",
-                                    Toast.LENGTH_LONG
-                                ).show()
-
-                                showForgotPinDialog = false
-                            } else {
-                                otpErrorMsg = "Incorrect OTP code! Reset failed."
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
-                    ) {
-                        Text("Verify OTP & Reset PIN")
-                    }
+                            newKeyAfterReset = brandNewKey
+                            showForgotPinDialog = false
+                            showResetSuccessDialog = true
+                        } else {
+                            keyErrorMsg = "Invalid Recovery Key! Please check your saved backup key."
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                ) {
+                    Text("Verify & Reset PIN")
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showForgotPinDialog = false }) {
                     Text("Cancel")
+                }
+            }
+        )
+    }
+
+    // Success Dialog after PIN Reset displaying the NEW single-use Recovery Key
+    if (showResetSuccessDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetSuccessDialog = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Info, contentDescription = null, tint = RedPrimary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("PIN Reset Successful!")
+                }
+            },
+            text = {
+                Column {
+                    Text(
+                        text = "Your Safe Box PIN has been reset to default: 1234",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "IMPORTANT: Because your previous key was used, a NEW single-use Recovery Key has been generated for you below. Please copy and save it securely:",
+                        fontSize = 12.sp,
+                        color = Color.Gray
+                    )
+
+                    Spacer(modifier = Modifier.height(10.dp))
+
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = RedLight),
+                        shape = RoundedCornerShape(10.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Text(
+                                text = "NEW RECOVERY KEY",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = RedPrimary,
+                                letterSpacing = 1.sp
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = newKeyAfterReset,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                color = RedPrimary,
+                                letterSpacing = 1.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(newKeyAfterReset))
+                            Toast.makeText(context, "New Recovery Key copied to clipboard!", Toast.LENGTH_SHORT).show()
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Copy New Key")
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showResetSuccessDialog = false }) {
+                    Text("Got It", fontWeight = FontWeight.Bold, color = RedPrimary)
                 }
             }
         )

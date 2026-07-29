@@ -75,5 +75,5 @@ data class AppSettingsEntity(
     val safeBoxPin: String = "",
     val autoLockOnBg: Boolean = true,
     val fingerprintEnabled: Boolean = false,
-    val recoveryEmail: String = ""
+    val recoveryKey: String = ""
 )

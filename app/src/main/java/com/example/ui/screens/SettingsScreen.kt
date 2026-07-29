@@ -48,6 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.model.AppSettingsEntity
 import com.example.ui.MainViewModel
+import com.example.ui.theme.RedLight
 import com.example.ui.theme.RedPrimary
 
 @Composable
@@ -153,8 +154,20 @@ fun SettingsScreen(
 
             // Safe Box Settings
             item {
-                var showEmailDialog by remember { mutableStateOf(false) }
-                var emailInput by remember { mutableStateOf(settings.recoveryEmail) }
+                var showKeyDialog by remember { mutableStateOf(false) }
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+
+                // Ensure a key exists
+                val currentKey = remember(settings.recoveryKey) {
+                    if (settings.recoveryKey.isBlank()) {
+                        val genKey = com.example.util.generateRecoveryKey()
+                        viewModel.updateSettings(settings.copy(recoveryKey = genKey))
+                        genKey
+                    } else {
+                        settings.recoveryKey
+                    }
+                }
 
                 SettingsSectionHeader(title = "SAFE BOX SECURITY", icon = Icons.Default.Lock)
                 Card(
@@ -177,53 +190,92 @@ fun SettingsScreen(
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable {
-                                    emailInput = settings.recoveryEmail
-                                    showEmailDialog = true
-                                }
+                                .clickable { showKeyDialog = true }
                                 .padding(horizontal = 16.dp, vertical = 14.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(text = "Recovery Gmail (for Forgot PIN)", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                            Column {
+                                Text(text = "Recovery Key (Offline Backup)", fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                Text(text = "Use this code if you forget your PIN", fontSize = 11.sp, color = Color.Gray)
+                            }
                             Text(
-                                text = if (settings.recoveryEmail.isNotBlank()) settings.recoveryEmail else "Not set (Tap to set)",
+                                text = "View / Copy",
                                 fontSize = 13.sp,
-                                color = if (settings.recoveryEmail.isNotBlank()) RedPrimary else Color.Gray,
-                                fontWeight = FontWeight.SemiBold
+                                color = RedPrimary,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
                 }
 
-                if (showEmailDialog) {
+                if (showKeyDialog) {
                     AlertDialog(
-                        onDismissRequest = { showEmailDialog = false },
-                        title = { Text("Set Recovery Gmail") },
+                        onDismissRequest = { showKeyDialog = false },
+                        title = { Text("Safe Box Recovery Key") },
                         text = {
                             Column {
-                                Text("Enter your Gmail address to receive OTP when resetting PIN:", fontSize = 13.sp, color = Color.Gray)
-                                Spacer(modifier = Modifier.height(10.dp))
-                                androidx.compose.material3.OutlinedTextField(
-                                    value = emailInput,
-                                    onValueChange = { emailInput = it },
-                                    label = { Text("Gmail Address") },
-                                    singleLine = true,
-                                    modifier = Modifier.fillMaxWidth()
+                                Text(
+                                    text = "This single-use 16-character key allows you to reset your PIN completely offline if you ever forget it. Save it in a safe place (Notes/Password Manager).",
+                                    fontSize = 12.sp,
+                                    color = Color.Gray
                                 )
+                                Spacer(modifier = Modifier.height(14.dp))
+                                Card(
+                                    colors = CardDefaults.cardColors(containerColor = RedLight),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(14.dp),
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = "YOUR BACKUP CODE",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = RedPrimary,
+                                            letterSpacing = 1.sp
+                                        )
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        Text(
+                                            text = currentKey,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color = RedPrimary,
+                                            letterSpacing = 1.sp
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    TextButton(onClick = {
+                                        val newKey = com.example.util.generateRecoveryKey()
+                                        viewModel.updateSettings(settings.copy(recoveryKey = newKey))
+                                        android.widget.Toast.makeText(context, "New Recovery Key generated!", android.widget.Toast.LENGTH_SHORT).show()
+                                    }) {
+                                        Text("Generate New Key", fontSize = 12.sp, color = Color.Gray)
+                                    }
+
+                                    Button(
+                                        onClick = {
+                                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(currentKey))
+                                            android.widget.Toast.makeText(context, "Recovery Key copied to clipboard!", android.widget.Toast.LENGTH_SHORT).show()
+                                        },
+                                        colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
+                                    ) {
+                                        Text("Copy Key", fontSize = 12.sp)
+                                    }
+                                }
                             }
                         },
                         confirmButton = {
-                            Button(
-                                onClick = {
-                                    viewModel.updateSettings(settings.copy(recoveryEmail = emailInput.trim()))
-                                    showEmailDialog = false
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = RedPrimary)
-                            ) { Text("Save Email") }
-                        },
-                        dismissButton = {
-                            TextButton(onClick = { showEmailDialog = false }) { Text("Cancel") }
+                            TextButton(onClick = { showKeyDialog = false }) {
+                                Text("Done", fontWeight = FontWeight.Bold, color = RedPrimary)
+                            }
                         }
                     )
                 }
